@@ -21,23 +21,23 @@ Aplicație de recomandări de cărți și predicție a ritmului de citire, pe ba
 
 ```
 shelfmatch/
-├── backend/
-│   └── app/
-│       ├── main.py
-│       ├── database.py
-│       ├── models.py
-│       ├── schemas.py
-│       ├── crud.py
-│       ├── google_books.py
-│       └── routers/
-│           ├── books.py
-│           ├── recommendations.py
-│           └── stats.py
-├── frontend/
-│   └── streamlit_app.py
-├── db/
-│   └── schema.sql
-└── render.yaml
+  backend/
+    app/
+      main.py
+      database.py
+      models.py
+      schemas.py
+      crud.py
+      google_books.py
+      routers/
+        books.py
+        recommendations.py
+        stats.py
+  frontend/
+    streamlit_app.py
+  db/
+    schema.sql
+  render.yaml
 ```
 
 ## Setup local
@@ -91,5 +91,4 @@ GOOGLE_BOOKS_API_KEY=
 **Backend + bază de date**: Render, folosind `render.yaml` (Blueprint) pentru configurare automată a serviciului web și a bazei PostgreSQL.
 
 **Frontend**: Streamlit Community Cloud, cu variabila `API_URL` setată în Secrets către URL-ul public al backend-ului.
-```
 
