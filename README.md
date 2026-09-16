@@ -1,12 +1,27 @@
+```markdown
 # ShelfMatch
 
-Aplicație de recomandări de cărți + predicție a ritmului de citire, pe baza istoricului tău.
+Aplicație de recomandări de cărți și predicție a ritmului de citire, pe baza istoricului personal de lectură.
+
+## Funcționalități
+
+- **Bibliotecă personală** — căutare cărți prin Google Books API, cu adăugare automată a copertei, autorului, genului și numărului de pagini
+- **Recomandări** — sugestii de cărți noi bazate pe genurile cu rating mediu cel mai mare din istoric
+- **Predicție ritm de citire** — estimează câte zile ar dura o carte nouă, pe baza ritmului mediu (pagini/zi) calculat per gen
+- **Dashboard** — statistici agregate: rating mediu și ritm de citire per gen
+
+## Tech stack
+
+- **Backend**: Python, FastAPI, SQLAlchemy
+- **Bază de date**: PostgreSQL
+- **Frontend**: Streamlit
+- **API extern**: Google Books API
 
 ## Structură
 
 ```
 shelfmatch/
-├── backend/          # FastAPI
+├── backend/
 │   └── app/
 │       ├── main.py
 │       ├── database.py
@@ -15,77 +30,66 @@ shelfmatch/
 │       ├── crud.py
 │       ├── google_books.py
 │       └── routers/
-├── frontend/         # Streamlit
+│           ├── books.py
+│           ├── recommendations.py
+│           └── stats.py
+├── frontend/
+│   └── streamlit_app.py
 ├── db/
 │   └── schema.sql
-└── README.md
+└── render.yaml
 ```
 
-## Setup local (VS Code)
+## Setup local
 
-1. **PostgreSQL** — instalează local sau folosește Docker:
-   ```bash
-   docker run --name shelfmatch-db -e POSTGRES_PASSWORD=parola -e POSTGRES_DB=shelfmatch -p 5432:5432 -d postgres
-   ```
-
-2. **Rulează schema**:
-   ```bash
-   psql -h localhost -U postgres -d shelfmatch -f db/schema.sql
-   ```
-
-3. **Backend**:
-   ```bash
-   cd backend
-   python -m venv venv
-   venv\Scripts\activate        # Windows
-   # source venv/bin/activate   # Mac/Linux
-   pip install -r requirements.txt
-   cp .env.example .env         # completează DATABASE_URL
-   uvicorn app.main:app --reload
-   ```
-   → API disponibil la `http://localhost:8000`, documentație interactivă la `http://localhost:8000/docs`
-
-4. **Frontend** (terminal nou):
-   ```bash
-   cd frontend
-   pip install -r requirements.txt
-   streamlit run streamlit_app.py
-   ```
-   → Dashboard la `http://localhost:8501`
-
-## Deschidere în VS Code
+### 1. Bază de date
 
 ```bash
-code shelfmatch
+psql -h localhost -U postgres -c "CREATE DATABASE shelfmatch;"
+psql -h localhost -U postgres -d shelfmatch -f db/schema.sql
 ```
 
-Recomandat: extensiile Python (Microsoft) și SQLTools (pentru a naviga direct în baza de date din editor).
+### 2. Backend
 
-## Publicare pe GitHub
+```bash
+cd backend
+python -m venv venv
+venv\Scripts\activate        # Windows
+# source venv/bin/activate   # Mac/Linux
+pip install -r requirements.txt
+cp .env.example .env         # completează DATABASE_URL și, opțional, GOOGLE_BOOKS_API_KEY
+uvicorn app.main:app --reload
+```
 
-\`\`\`bash
-cd shelfmatch
-git init
-git add .
-git commit -m "Initial commit: ShelfMatch backend + frontend"
-git branch -M main
-git remote add origin https://github.com/<user>/shelfmatch.git
-git push -u origin main
-\`\`\`
+API disponibil la `http://localhost:8000`, documentație interactivă la `http://localhost:8000/docs`.
 
-## Deploy (ca să ai un link live, nu doar cod)
+### 3. Frontend
 
-**Backend + DB pe Render:**
-1. render.com → New → Blueprint → conectezi repo-ul GitHub. `render.yaml` din proiect configurează automat serviciul web + baza PostgreSQL.
-2. După primul deploy, rulezi `db/schema.sql` pe baza de date de pe Render (din Render Dashboard → shelfmatch-db → Connect → copiezi comanda `psql` și rulezi `\i db/schema.sql`).
-3. Notează URL-ul public al API-ului (ceva de forma `https://shelfmatch-api.onrender.com`).
+```bash
+cd frontend
+python -m venv venv
+venv\Scripts\activate
+pip install -r requirements.txt
+streamlit run streamlit_app.py
+```
 
-**Frontend pe Streamlit Community Cloud:**
-1. share.streamlit.io → New app → conectezi repo-ul, alegi `frontend/streamlit_app.py` ca entry point.
-2. Settings → Secrets → adaugi:
-   \`\`\`
-   API_URL = "https://shelfmatch-api.onrender.com"
-   \`\`\`
-3. Deploy — primești un link public gen `https://shelfmatch.streamlit.app`.
+Interfață disponibilă la `http://localhost:8501`.
 
-Link-ul ăsta îl pui în CV, nu doar "vezi codul pe GitHub".
+## Variabile de mediu
+
+`backend/.env`:
+
+```
+DATABASE_URL=postgresql://postgres:PAROLA@localhost:5432/shelfmatch
+GOOGLE_BOOKS_API_KEY=
+```
+
+`GOOGLE_BOOKS_API_KEY` e opțională — fără ea, API-ul funcționează dar cu o limită de request-uri mai mică.
+
+## Deploy
+
+**Backend + bază de date**: Render, folosind `render.yaml` (Blueprint) pentru configurare automată a serviciului web și a bazei PostgreSQL.
+
+**Frontend**: Streamlit Community Cloud, cu variabila `API_URL` setată în Secrets către URL-ul public al backend-ului.
+```
+
