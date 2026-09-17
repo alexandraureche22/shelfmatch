@@ -1,4 +1,11 @@
---ShelfMatch schema PostgreSQL
+-- ShelfMatch — schema PostgreSQL
+
+CREATE TABLE users (
+    id             SERIAL PRIMARY KEY,
+    email          VARCHAR(255) UNIQUE NOT NULL,
+    password_hash  VARCHAR(255) NOT NULL,
+    created_at     TIMESTAMP DEFAULT NOW()
+);
 
 CREATE TABLE books (
     id              SERIAL PRIMARY KEY,
@@ -15,6 +22,7 @@ CREATE TYPE reading_status AS ENUM ('wishlist', 'reading', 'finished');
 
 CREATE TABLE user_books (
     id             SERIAL PRIMARY KEY,
+    user_id        INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     book_id        INTEGER NOT NULL REFERENCES books(id) ON DELETE CASCADE,
     rating         SMALLINT CHECK (rating BETWEEN 1 AND 5),
     date_started   DATE,
@@ -24,12 +32,13 @@ CREATE TABLE user_books (
     CHECK (date_finished IS NULL OR date_started IS NULL OR date_finished >= date_started)
 );
 
--- Indexuri pentru querurile de agregare
 CREATE INDEX idx_user_books_status ON user_books(status);
 CREATE INDEX idx_user_books_book_id ON user_books(book_id);
+CREATE INDEX idx_user_books_user_id ON user_books(user_id);
 CREATE INDEX idx_books_genre ON books(genre);
 
--- View calculat: statistici pe gen (ritm de citire + preferință)
+-- View de referință: statistici globale pe gen (toți utilizatorii la un loc).
+-- Aplicația folosește, în schimb, o interogare per-utilizator (vezi crud.py).
 CREATE VIEW genre_stats AS
 SELECT
     b.genre,
@@ -45,13 +54,57 @@ WHERE ub.status = 'finished'
   AND ub.date_finished IS NOT NULL
 GROUP BY b.genre;
 
--- Date de test 
 INSERT INTO books (title, author, genre, pages, google_books_id) VALUES
-('Dune', 'Frank Herbert', 'Science Fiction', 412, 'B1xXX'),
-('Sapiens', 'Yuval Noah Harari', 'Non-Fiction', 443, 'B2xXX'),
-('1984', 'George Orwell', 'Dystopia', 328, 'B3xXX');
+('A little life', 'Hanya Yanagihara', 'Fiction', 412, 'B1xXX'),
+('Caraval', 'Stephanie Garber', 'Fantasy', 443, 'B2xXX'),
+('The picture of Dorian Gray', 'Oscar Wilde', 'Fiction', 328, 'B3xXX');
 
-INSERT INTO user_books (book_id, rating, date_started, date_finished, status) VALUES
-(1, 5, '2026-01-01', '2026-01-10', 'finished'),
-(2, 4, '2026-01-15', '2026-01-30', 'finished'),
-(3, 5, '2026-02-01', '2026-02-05', 'finished');
+-- ---------- Prieteni ----------
+CREATE TYPE friendship_status AS ENUM ('pending', 'accepted');
+
+CREATE TABLE friendships (
+    id             SERIAL PRIMARY KEY,
+    requester_id   INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    addressee_id   INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    status         friendship_status NOT NULL DEFAULT 'pending',
+    created_at     TIMESTAMP DEFAULT NOW(),
+    UNIQUE (requester_id, addressee_id),
+    CHECK (requester_id != addressee_id)
+);
+
+CREATE INDEX idx_friendships_requester ON friendships(requester_id);
+CREATE INDEX idx_friendships_addressee ON friendships(addressee_id);
+
+-- ---------- Challenge-uri lunare ----------
+CREATE TYPE challenge_visibility AS ENUM ('public', 'friends');
+
+CREATE TABLE challenges (
+    id             SERIAL PRIMARY KEY,
+    creator_id     INTEGER REFERENCES users(id) ON DELETE CASCADE,  -- NULL = challenge oficial ShelfMatch
+    title          VARCHAR(255) NOT NULL,
+    description    TEXT,
+    month          VARCHAR(7) NOT NULL,  -- format 'YYYY-MM'
+    visibility     challenge_visibility NOT NULL DEFAULT 'friends',
+    created_at     TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX idx_challenges_month ON challenges(month);
+
+-- Câteva challenge-uri oficiale, vizibile tuturor
+INSERT INTO challenges (creator_id, title, description, month, visibility) VALUES
+(NULL, 'Read a Classic', 'Choose a book considered a classic of literature, published at least 50 years ago.', '2026-01', 'public'),
+(NULL, 'New Author for You', 'Read a book by an author you haven''t read before.', '2026-02', 'public'),
+(NULL, 'Non-Fiction', 'Read a non-fiction book: history, science, biography or essay.', '2026-03', 'public');
+
+
+-- ---------- Completarea challenge-urilor ----------
+CREATE TABLE challenge_completions (
+    id             SERIAL PRIMARY KEY,
+    challenge_id   INTEGER NOT NULL REFERENCES challenges(id) ON DELETE CASCADE,
+    user_id        INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    user_book_id   INTEGER NOT NULL REFERENCES user_books(id) ON DELETE CASCADE,
+    created_at     TIMESTAMP DEFAULT NOW(),
+    UNIQUE (challenge_id, user_id)
+);
+
+CREATE INDEX idx_completions_challenge ON challenge_completions(challenge_id);

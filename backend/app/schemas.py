@@ -1,6 +1,6 @@
 from datetime import date, datetime
 from typing import Optional
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, EmailStr
 from .models import ReadingStatus
 
 
@@ -31,6 +31,14 @@ class UserBookCreate(BaseModel):
     status: ReadingStatus = ReadingStatus.wishlist
 
 
+class UserBookUpdate(BaseModel):
+    """Toate câmpurile opționale — trimiți doar ce vrei să schimbi."""
+    rating: Optional[int] = None
+    date_started: Optional[date] = None
+    date_finished: Optional[date] = None
+    status: Optional[ReadingStatus] = None
+
+
 class UserBookOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
@@ -57,3 +65,81 @@ class RecommendationOut(BaseModel):
     google_books_id: Optional[str]
     cover_url: Optional[str]
     estimated_days_to_read: Optional[float] = None
+
+
+# ---------- Auth ----------
+
+class UserRegister(BaseModel):
+    email: EmailStr
+    password: str
+
+
+class UserLogin(BaseModel):
+    email: EmailStr
+    password: str
+
+
+class UserOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    email: str
+
+
+class TokenOut(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    user: UserOut
+
+# ---------- Friends ----------
+
+class FriendRequestCreate(BaseModel):
+    email: EmailStr
+
+
+class FriendOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    email: str
+
+
+class FriendRequestOut(BaseModel):
+    id: int
+    requester: FriendOut
+
+
+# ---------- Feed ----------
+
+class FeedItemOut(BaseModel):
+    user_email: str
+    book_title: str
+    book_author: Optional[str]
+    cover_url: Optional[str]
+    status: ReadingStatus
+    rating: Optional[int]
+    date: Optional[date]
+
+
+# ---------- Challenges ----------
+
+class ChallengeCreate(BaseModel):
+    title: str
+    description: Optional[str] = None
+    month: str  # 'YYYY-MM'
+
+
+class ChallengeOut(BaseModel):
+    id: int
+    title: str
+    description: Optional[str]
+    month: str
+    visibility: str
+    creator_email: Optional[str] = None
+
+class ChallengeCompleteCreate(BaseModel):
+    user_book_id: int
+
+
+class ChallengeCompletionOut(BaseModel):
+    user_email: str
+    book_title: str
+    cover_url: Optional[str] = None
