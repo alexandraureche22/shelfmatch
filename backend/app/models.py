@@ -53,6 +53,8 @@ class UserBook(Base):
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     book_id = Column(Integer, ForeignKey("books.id", ondelete="CASCADE"), nullable=False)
     rating = Column(SmallInteger)
+    review = Column(Text)
+    current_page = Column(Integer)
     date_started = Column(Date)
     date_finished = Column(Date)
     status = Column(Enum(ReadingStatus, name="reading_status"), nullable=False, default=ReadingStatus.wishlist)
@@ -98,3 +100,34 @@ class ChallengeCompletion(Base):
     challenge = relationship("Challenge")
     user = relationship("User")
     user_book = relationship("UserBook")
+
+class ReadingGoal(Base):
+    __tablename__ = "reading_goals"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    year = Column(Integer, nullable=False)
+    target = Column(Integer, nullable=False)
+    created_at = Column(DateTime, server_default=func.now())
+
+    user = relationship("User")
+
+class FeedLike(Base):
+    __tablename__ = "feed_likes"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_book_id = Column(Integer, ForeignKey("user_books.id", ondelete="CASCADE"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    created_at = Column(DateTime, server_default=func.now())
+
+
+class FeedComment(Base):
+    __tablename__ = "feed_comments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_book_id = Column(Integer, ForeignKey("user_books.id", ondelete="CASCADE"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    text = Column(Text, nullable=False)
+    created_at = Column(DateTime, server_default=func.now())
+
+    user = relationship("User")

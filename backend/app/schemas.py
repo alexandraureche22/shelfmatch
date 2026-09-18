@@ -26,6 +26,8 @@ class BookOut(BookBase):
 class UserBookCreate(BaseModel):
     book_id: int
     rating: Optional[int] = None
+    review: Optional[str] = None
+    current_page: Optional[int] = None
     date_started: Optional[date] = None
     date_finished: Optional[date] = None
     status: ReadingStatus = ReadingStatus.wishlist
@@ -34,6 +36,8 @@ class UserBookCreate(BaseModel):
 class UserBookUpdate(BaseModel):
     """Toate câmpurile opționale — trimiți doar ce vrei să schimbi."""
     rating: Optional[int] = None
+    review: Optional[str] = None
+    current_page: Optional[int] = None
     date_started: Optional[date] = None
     date_finished: Optional[date] = None
     status: Optional[ReadingStatus] = None
@@ -44,6 +48,8 @@ class UserBookOut(BaseModel):
     id: int
     book_id: int
     rating: Optional[int]
+    review: Optional[str] = None
+    current_page: Optional[int] = None
     date_started: Optional[date]
     date_finished: Optional[date]
     status: ReadingStatus
@@ -51,7 +57,7 @@ class UserBookOut(BaseModel):
 
 
 class GenreStatOut(BaseModel):
-    genre: str
+    genre: Optional[str] = None
     books_finished: int
     avg_rating: Optional[float]
     avg_pages_per_day: Optional[float]
@@ -110,6 +116,7 @@ class FriendRequestOut(BaseModel):
 # ---------- Feed ----------
 
 class FeedItemOut(BaseModel):
+    user_book_id: int
     user_email: str
     book_title: str
     book_author: Optional[str]
@@ -118,6 +125,19 @@ class FeedItemOut(BaseModel):
     rating: Optional[int]
     date: Optional[date]
 
+
+class CommentCreate(BaseModel):
+    text: str
+
+
+class CommentOut(BaseModel):
+    user_email: str
+    text: str
+
+
+class LikeOut(BaseModel):
+    liked: bool
+    like_count: int
 
 # ---------- Challenges ----------
 
@@ -143,3 +163,15 @@ class ChallengeCompletionOut(BaseModel):
     user_email: str
     book_title: str
     cover_url: Optional[str] = None
+
+# ---------- Reading goal ----------
+
+class ReadingGoalSet(BaseModel):
+    target: int
+    year: Optional[int] = None  # implicit anul curent
+
+
+class ReadingGoalOut(BaseModel):
+    year: int
+    target: int
+    finished_count: int

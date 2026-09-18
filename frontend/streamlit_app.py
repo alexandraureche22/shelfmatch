@@ -4,7 +4,7 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 
-st.set_page_config(page_title="ShelfMatch", page_icon="☕", layout="wide")
+st.set_page_config(page_title="ShelfMatch", page_icon="📚", layout="wide")
 
 try:
     API_URL = st.secrets["API_URL"]
@@ -205,8 +205,11 @@ with col_logout:
         st.session_state.pop("user_email", None)
         st.rerun()
 
+pending_count = len(api_get("/friends/requests") or [])
+friends_label = f"Friends ({pending_count})" if pending_count else "Friends"
+
 tab_library, tab_recommend, tab_dashboard, tab_feed, tab_friends, tab_challenges = st.tabs(
-    ["Library", "Recommendations", "Dashboard", "Feed", "Friends", "Challenges"]
+    ["Library", "Recommendations", "Dashboard", "Feed", friends_label, "Challenges"]
 )
 
 # ---------- TAB: Bibliotecă ----------
@@ -230,6 +233,12 @@ with tab_library:
                         with st.form(key=f"log_{book['google_books_id']}"):
                             status = st.selectbox("Status", ["wishlist", "reading", "finished"], key=f"status_{book['google_books_id']}")
                             rating = st.slider("Rating", 1, 5, 3, key=f"rating_{book['google_books_id']}")
+                            review = st.text_area("Review", key=f"review_{book['google_books_id']}")
+                            current_page = st.number_input(
+                                "Current page (if reading)", min_value=0,
+                                max_value=book.get("pages") or 10000, value=0,
+                                key=f"page_{book['google_books_id']}",
+                            )
                             date_started = st.date_input("Start date", value=None, key=f"start_{book['google_books_id']}")
                             date_finished = st.date_input("End date", value=None, key=f"end_{book['google_books_id']}")
                             submitted = st.form_submit_button("Add to library")
@@ -240,6 +249,8 @@ with tab_library:
                                     entry = {
                                         "book_id": book_resp["id"],
                                         "rating": rating if status == "finished" else None,
+                                        "review": review if status == "finished" else None,
+                                        "current_page": current_page if status == "reading" and current_page else None,
                                         "date_started": str(date_started) if date_started else None,
                                         "date_finished": str(date_finished) if date_finished else None,
                                         "status": status,
@@ -264,6 +275,13 @@ with tab_library:
                 with col2:
                     st.write(f"**{book['title']}** — {book.get('author', 'unknown')}")
                     st.caption(f"{book.get('genre', '')} · status: {entry['status']}")
+                    if entry.get("review"):
+                        st.write(f"Review: {entry['review']}")
+                    if entry.get("rating"):
+                        st.write("⭐" * entry["rating"])
+                    if entry["status"] == "reading" and entry.get("current_page") and book.get("pages"):
+                        pct = min(entry["current_page"] / book["pages"], 1.0)
+                        st.progress(pct, text=f"Page {entry['current_page']} / {book['pages']}")
 
                     with st.expander("Edit / delete"):
                         with st.form(key=f"edit_{entry['id']}"):
@@ -274,6 +292,15 @@ with tab_library:
                             )
                             new_rating = st.slider(
                                 "Rating", 1, 5, entry["rating"] or 3, key=f"edit_rating_{entry['id']}"
+                            )
+
+                            new_review = st.text_area(
+                                "Review", value=entry.get("review") or "", key=f"edit_review_{entry['id']}"
+                            )
+                            new_current_page = st.number_input(
+                                "Current page (if reading)", min_value=0,
+                                max_value=book.get("pages") or 10000, value=entry.get("current_page") or 0,
+                                key=f"edit_page_{entry['id']}"
                             )
                             new_start = st.date_input(
                                 "Start date",
@@ -295,6 +322,8 @@ with tab_library:
                                 updates = {
                                     "status": new_status,
                                     "rating": new_rating if new_status == "finished" else entry["rating"],
+                                    "review": new_review if new_status == "finished" else entry.get("review"),
+                                    "current_page": new_current_page if new_status == "reading" else entry.get("current_page"),
                                     "date_started": str(new_start) if new_start else None,
                                     "date_finished": str(new_finish) if new_finish else None,
                                 }
@@ -311,6 +340,18 @@ with tab_library:
 
 # ---------- TAB: Recomandări ----------
 with tab_recommend:
+    st.subheader("Reading pace calculator")
+    st.caption("How many pages a day do you need to read to finish in time?")
+    calc_col1, calc_col2 = st.columns(2)
+    with calc_col1:
+        total_pages = st.number_input("Total pages", min_value=1, value=300, step=1)
+    with calc_col2:
+        days_target = st.number_input("Days to finish it in", min_value=1, value=14, step=1)
+
+    pages_per_day = total_pages / days_target
+    st.write(f"📖 You need to read **{pages_per_day:.1f} pages/day** to finish in {days_target} days.")
+
+    st.divider()
     st.subheader("What to read next")
     if st.button("Generate recommendations"):
         recs = api_get("/recommendations/")
@@ -330,6 +371,25 @@ with tab_recommend:
 
 # ---------- TAB: Dashboard ----------
 with tab_dashboard:
+    st.subheader("Reading goal")
+    goal = api_get("/goals/current")
+    if goal:
+        if goal["target"] > 0:
+            progress = min(goal["finished_count"] / goal["target"], 1.0)
+            st.write(f"{goal['finished_count']} / {goal['target']} books in {goal['year']}")
+            st.progress(progress)
+        else:
+            st.caption("No goal set for this year yet.")
+
+        with st.expander("Set / update your goal"):
+            with st.form("goal_form"):
+                new_target = st.number_input("Books to read this year", min_value=1, value=max(goal["target"], 1), step=1)
+                if st.form_submit_button("Save goal"):
+                    if api_send("POST", "/goals/", json={"target": int(new_target)}):
+                        st.success("Goal saved!")
+                        st.rerun()
+
+    st.divider()
     st.subheader("Genre stats")
     stats = api_get("/stats/genres")
     if stats:
@@ -371,9 +431,27 @@ with tab_feed:
                         st.write("⭐" * item["rating"])
                     if item.get("date"):
                         st.caption(str(item["date"]))
+
+                ub_id = item["user_book_id"]
+                like_info = api_get(f"/feed/{ub_id}/like") or {"liked": False, "like_count": 0}
+                like_label = f"❤️ {like_info['like_count']}" if like_info["liked"] else f"🤍 {like_info['like_count']}"
+                col_like, col_space = st.columns([1, 5])
+                with col_like:
+                    if st.button(like_label, key=f"like_{ub_id}"):
+                        api_send("POST", f"/feed/{ub_id}/like")
+                        st.rerun()
+
+                with st.expander("Comments"):
+                    comments = api_get(f"/feed/{ub_id}/comments") or []
+                    for c in comments:
+                        st.write(f"**{c['user_email']}:** {c['text']}")
+                    with st.form(key=f"comment_form_{ub_id}"):
+                        new_comment = st.text_input("Add a comment", key=f"comment_input_{ub_id}")
+                        if st.form_submit_button("Post") and new_comment:
+                            if api_send("POST", f"/feed/{ub_id}/comments", json={"text": new_comment}):
+                                st.rerun()
     elif feed == []:
         st.info("Add some friends to see their reading activity here.")
-
 # ---------- TAB: Friends ----------
 with tab_friends:
     st.subheader("Add a friend")
@@ -405,7 +483,14 @@ with tab_friends:
     friends_list = api_get("/friends/")
     if friends_list:
         for f in friends_list:
-            st.write(f"• {f['email']}")
+            col1, col2 = st.columns([4, 1])
+            with col1:
+                st.write(f"• {f['email']}")
+            with col2:
+                if st.button("Remove", key=f"remove_friend_{f['id']}"):
+                    if api_send("DELETE", f"/friends/{f['id']}"):
+                        st.success("Friend removed.")
+                        st.rerun()
     elif friends_list == []:
         st.info("You haven't added any friends yet.")
 

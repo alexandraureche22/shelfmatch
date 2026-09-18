@@ -25,6 +25,8 @@ CREATE TABLE user_books (
     user_id        INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     book_id        INTEGER NOT NULL REFERENCES books(id) ON DELETE CASCADE,
     rating         SMALLINT CHECK (rating BETWEEN 1 AND 5),
+    review         TEXT,
+    current_page   INTEGER,
     date_started   DATE,
     date_finished  DATE,
     status         reading_status NOT NULL DEFAULT 'wishlist',
@@ -108,3 +110,33 @@ CREATE TABLE challenge_completions (
 );
 
 CREATE INDEX idx_completions_challenge ON challenge_completions(challenge_id);
+
+-- ---------- Obiectiv anual de citit ----------
+CREATE TABLE reading_goals (
+    id             SERIAL PRIMARY KEY,
+    user_id        INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    year           INTEGER NOT NULL,
+    target         INTEGER NOT NULL CHECK (target > 0),
+    created_at     TIMESTAMP DEFAULT NOW(),
+    UNIQUE (user_id, year)
+);
+
+-- ---------- Reacții pe feed ----------
+CREATE TABLE feed_likes (
+    id             SERIAL PRIMARY KEY,
+    user_book_id   INTEGER NOT NULL REFERENCES user_books(id) ON DELETE CASCADE,
+    user_id        INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at     TIMESTAMP DEFAULT NOW(),
+    UNIQUE (user_book_id, user_id)
+);
+
+CREATE TABLE feed_comments (
+    id             SERIAL PRIMARY KEY,
+    user_book_id   INTEGER NOT NULL REFERENCES user_books(id) ON DELETE CASCADE,
+    user_id        INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    text           TEXT NOT NULL,
+    created_at     TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX idx_feed_likes_book ON feed_likes(user_book_id);
+CREATE INDEX idx_feed_comments_book ON feed_comments(user_book_id);

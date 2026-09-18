@@ -79,24 +79,31 @@ def delete_user_book(db: Session, user_id: int, entry_id: int) -> bool:
 
 
 def get_genre_stats(db: Session, user_id: int):
-    """Statistici per-gen, doar pentru cărțile terminate de user-ul curent."""
+    """Statistici per-gen, pentru cărțile terminate de user-ul curent.
+    Ritmul (pagini/zi) apare doar dacă ai completat ambele date; rating-ul apare oricum."""
+    from sqlalchemy import case
+
+    pace_expr = case(
+        (
+            (models.UserBook.date_started.isnot(None)) & (models.UserBook.date_finished.isnot(None)),
+            models.Book.pages / func.nullif(
+                models.UserBook.date_finished - models.UserBook.date_started, 0
+            ),
+        ),
+        else_=None,
+    )
+
     rows = (
         db.query(
             models.Book.genre,
             func.count(models.UserBook.id).label("books_finished"),
             func.avg(models.UserBook.rating).label("avg_rating"),
-            func.avg(
-                models.Book.pages / func.nullif(
-                    models.UserBook.date_finished - models.UserBook.date_started, 0
-                )
-            ).label("avg_pages_per_day"),
+            func.avg(pace_expr).label("avg_pages_per_day"),
         )
         .join(models.Book, models.Book.id == models.UserBook.book_id)
         .filter(
             models.UserBook.user_id == user_id,
             models.UserBook.status == "finished",
-            models.UserBook.date_started.isnot(None),
-            models.UserBook.date_finished.isnot(None),
         )
         .group_by(models.Book.genre)
         .all()
@@ -202,6 +209,17 @@ def list_friends(db: Session, user_id: int) -> list[models.User]:
 def get_friend_ids(db: Session, user_id: int) -> set[int]:
     return {u.id for u in list_friends(db, user_id)}
 
+def remove_friend(db: Session, user_id: int, friend_id: int) -> bool:
+    friendship = db.query(models.Friendship).filter(
+        models.Friendship.status == "accepted",
+        ((models.Friendship.requester_id == user_id) & (models.Friendship.addressee_id == friend_id)) |
+        ((models.Friendship.requester_id == friend_id) & (models.Friendship.addressee_id == user_id)),
+    ).first()
+    if not friendship:
+        return False
+    db.delete(friendship)
+    db.commit()
+    return True
 
 # ---------- Feed ----------
 
@@ -221,6 +239,7 @@ def get_feed(db: Session, user_id: int, limit: int = 30):
     )
     return [
         {
+            "user_book_id": entry.id,
             "user_email": user.email,
             "book_title": book.title,
             "book_author": book.author,
@@ -231,6 +250,59 @@ def get_feed(db: Session, user_id: int, limit: int = 30):
         }
         for entry, book, user in rows
     ]
+
+# ---------- Reacții pe feed ----------
+
+def can_interact_with_user_book(db: Session, current_user_id: int, user_book_id: int) -> bool:
+    """Poți da like/comment doar pe cărțile tale sau ale prietenilor tăi."""
+    entry = db.query(models.UserBook).filter(models.UserBook.id == user_book_id).first()
+    if not entry:
+        return False
+    if entry.user_id == current_user_id:
+        return True
+    return entry.user_id in get_friend_ids(db, current_user_id)
+
+
+def get_like_info(db: Session, user_id: int, user_book_id: int):
+    count = db.query(func.count(models.FeedLike.id)).filter(
+        models.FeedLike.user_book_id == user_book_id
+    ).scalar() or 0
+    liked = db.query(models.FeedLike).filter(
+        models.FeedLike.user_book_id == user_book_id, models.FeedLike.user_id == user_id
+    ).first() is not None
+    return liked, count
+
+
+def toggle_like(db: Session, user_id: int, user_book_id: int):
+    existing = db.query(models.FeedLike).filter(
+        models.FeedLike.user_book_id == user_book_id, models.FeedLike.user_id == user_id
+    ).first()
+    if existing:
+        db.delete(existing)
+        db.commit()
+    else:
+        db.add(models.FeedLike(user_book_id=user_book_id, user_id=user_id))
+        db.commit()
+    return get_like_info(db, user_id, user_book_id)
+
+
+def list_comments(db: Session, user_book_id: int):
+    rows = (
+        db.query(models.FeedComment, models.User)
+        .join(models.User, models.User.id == models.FeedComment.user_id)
+        .filter(models.FeedComment.user_book_id == user_book_id)
+        .order_by(models.FeedComment.created_at.asc())
+        .all()
+    )
+    return [{"user_email": u.email, "text": c.text} for c, u in rows]
+
+
+def add_comment(db: Session, user_id: int, user_book_id: int, text: str):
+    comment = models.FeedComment(user_book_id=user_book_id, user_id=user_id, text=text)
+    db.add(comment)
+    db.commit()
+    db.refresh(comment)
+    return comment
 
 
 # ---------- Challenges ----------
@@ -320,3 +392,42 @@ def get_challenge_completions(db: Session, user_id: int, challenge_id: int):
         {"user_email": user.email, "book_title": book.title, "cover_url": book.cover_url}
         for _, _, book, user in rows
     ]
+
+# ---------- Reading goal ----------
+
+def set_reading_goal(db: Session, user_id: int, year: int, target: int) -> models.ReadingGoal:
+    existing = db.query(models.ReadingGoal).filter(
+        models.ReadingGoal.user_id == user_id,
+        models.ReadingGoal.year == year,
+    ).first()
+    if existing:
+        existing.target = target
+        db.commit()
+        db.refresh(existing)
+        return existing
+
+    goal = models.ReadingGoal(user_id=user_id, year=year, target=target)
+    db.add(goal)
+    db.commit()
+    db.refresh(goal)
+    return goal
+
+
+def get_reading_goal(db: Session, user_id: int, year: int):
+    """Întoarce (target, câte cărți terminate anul respectiv). target e 0 dacă nu ai setat un obiectiv."""
+    goal = db.query(models.ReadingGoal).filter(
+        models.ReadingGoal.user_id == user_id,
+        models.ReadingGoal.year == year,
+    ).first()
+
+    finished_count = (
+        db.query(func.count(models.UserBook.id))
+        .filter(
+            models.UserBook.user_id == user_id,
+            models.UserBook.status == "finished",
+            func.extract("year", func.coalesce(models.UserBook.date_finished, models.UserBook.created_at)) == year,
+        )
+        .scalar()
+    ) or 0
+
+    return (goal.target if goal else 0), finished_count

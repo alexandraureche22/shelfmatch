@@ -45,3 +45,14 @@ def list_friends(
     current_user: models.User = Depends(auth.get_current_user),
 ):
     return crud.list_friends(db, current_user.id)
+
+@router.delete("/{friend_id}")
+def remove_friend(
+    friend_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    ok = crud.remove_friend(db, current_user.id, friend_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Friendship not found.")
+    return {"removed": True}

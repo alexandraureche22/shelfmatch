@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from .routers import books, recommendations, stats, auth, friends, feed, challenges
+from .routers import books, recommendations, stats, auth, friends, feed, challenges, goals
 
 app = FastAPI(title="ShelfMatch API")
 
@@ -18,6 +18,7 @@ app.include_router(stats.router)
 app.include_router(friends.router)
 app.include_router(feed.router)
 app.include_router(challenges.router)
+app.include_router(goals.router)
 
 
 @app.get("/")
